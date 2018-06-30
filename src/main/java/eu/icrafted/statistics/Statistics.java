@@ -86,22 +86,26 @@ public class Statistics {
 
     @Listener
     public void onServerStart(GameStartedServerEvent event) {
-        logger.info("Starting, iCrafted statistics...");
+        try {
+            logger.info("Starting, iCrafted statistics...");
 
-        // load configuration
-        initConfig();
+            // load configuration
+            initConfig();
 
-        // open the SQL connection
-        initSqlConnection();
+            // open the SQL connection
+            initSqlConnection();
 
-        // load scheduler
-        initScheduler();
+            // load scheduler
+            initScheduler();
 
-        // get the server id
-        serverId = getServerID(config.getNode("general", "server").getString());
-        executeSql("UPDATE player SET isonline=0, serverid=NULL WHERE serverid=" + serverId);
+            // get the server id
+            serverId = getServerID(config.getNode("general", "server").getString());
+            executeSql("UPDATE player SET isonline=0, serverid=NULL WHERE serverid=" + serverId);
 
-        logger.info("-> Statistics module loaded");
+            logger.info("-> Statistics module loaded");
+        } catch(Exception ex) {
+            ex.printStackTrace();
+        }
     }
 
     @Listener
@@ -128,14 +132,21 @@ public class Statistics {
     @Listener
     public void onReloadPlugins(GameReloadEvent event)
     {
-        // reload configuration
-        initConfig();
+        try {
+            // reload configuration
+            initConfig();
 
-        // open the SQL connection
-        initSqlConnection();
+            // open the SQL connection
+            initSqlConnection();
 
-        // load scheduler
-        initScheduler();
+            // load scheduler
+            initScheduler();
+
+            // get the server id
+            serverId = getServerID(config.getNode("general", "server").getString());
+        } catch(Exception ex) {
+            ex.printStackTrace();
+        }
     }
 
     @Listener
@@ -346,8 +357,12 @@ public class Statistics {
         }
     }
 
-    private int getServerID(String identifier)
+    private int getServerID(String identifier) throws Exception
     {
+        if(identifier.length() < 1) {
+            throw new Exception("No server name is given.");
+        }
+
         try {
             // check if the server exists
             ResultSet result = querySql("SELECT id FROM server WHERE identifier='" + identifier + "'");
