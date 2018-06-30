@@ -1,5 +1,7 @@
 package eu.icrafted.statistics;
 
+import java.util.HashMap;
+
 public class Session {
     private long SessionID;
 
@@ -40,4 +42,36 @@ public class Session {
     public void setStartTime(long startTime) {
         StartTime = startTime;
     }
+
+    private int deads;
+
+    public int getDeads() {
+        return deads;
+    }
+
+    public void setDeads(int deads) {
+        this.deads = deads;
+    }
+
+    private double damagetaken;
+
+    public double getDamagetaken() {
+        return damagetaken;
+    }
+
+    public void setDamagetaken(double damagetaken) {
+        this.damagetaken = damagetaken;
+    }
+
+    private double damagedealt;
+
+    public double getDamagedealt() {
+        return damagedealt;
+    }
+
+    public void setDamagedealt(double damagedealt) {
+        this.damagedealt = damagedealt;
+    }
+
+    public HashMap<String, Double> AttackedEntities = new HashMap<>();
 }

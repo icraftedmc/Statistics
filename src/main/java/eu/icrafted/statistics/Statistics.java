@@ -1,5 +1,7 @@
 package eu.icrafted.statistics;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import org.spongepowered.api.Game;
 import org.spongepowered.api.Sponge;
 import org.spongepowered.api.plugin.Plugin;
@@ -10,7 +12,16 @@ import org.spongepowered.api.event.Listener;
 import org.spongepowered.api.event.game.state.GameStoppedServerEvent;
 import org.spongepowered.api.event.game.state.GameStartedServerEvent;
 import org.spongepowered.api.event.game.GameReloadEvent;
+
+import org.spongepowered.api.event.filter.cause.First;
+import org.spongepowered.api.event.filter.type.Include;
+import org.spongepowered.api.event.entity.AttackEntityEvent;
+import org.spongepowered.api.event.entity.DamageEntityEvent;
+import org.spongepowered.api.event.entity.DestructEntityEvent;
+import org.spongepowered.api.event.entity.TargetEntityEvent;
 import org.spongepowered.api.event.network.ClientConnectionEvent;
+
+import org.spongepowered.api.entity.living.monster.Monster;
 import org.spongepowered.api.entity.living.player.Player;
 import org.spongepowered.api.world.World;
 import org.spongepowered.api.service.sql.SqlService;
@@ -88,6 +99,7 @@ public class Statistics {
 
         // get the server id
         serverId = getServerID(config.getNode("general", "server").getString());
+        executeSql("UPDATE player SET isonline=0, serverid=NULL WHERE serverid=" + serverId);
 
         logger.info("-> Statistics module loaded");
     }
@@ -95,6 +107,12 @@ public class Statistics {
     @Listener
     public void onServerStop(GameStoppedServerEvent event) {
         logger.info("Stopping, iCrafted statistics...");
+
+        // handle the store of the sessions
+        for(Session s:playerSessions.values()) {
+            savePlayerStatistics(s.getUUID());
+            executeSql("UPDATE player SET isonline=0, serverid=NULL WHERE id='" + s.getUUID() + "'");
+        }
 
         // close the connection to the database server
         try {
@@ -154,21 +172,71 @@ public class Statistics {
     }
 
     @Listener
+    public void onAttackEntity(AttackEntityEvent event, @First Player player)
+    {
+        if(playerSessions.containsKey(player.getUniqueId().toString())) {
+            //logger.info("Attack " + event.getFinalOutputDamage() + " - " + event.getTargetEntity().getType().getName() + " - " + player.getUniqueId());
+
+            Session session = playerSessions.get(player.getUniqueId().toString());
+            session.setDamagedealt(session.getDamagedealt() + event.getFinalOutputDamage());
+
+            if(session.AttackedEntities.containsKey(event.getTargetEntity().getType().getName())) {
+                session.AttackedEntities.put(event.getTargetEntity().getType().getName(), session.AttackedEntities.get(event.getTargetEntity().getType().getName()) + event.getFinalOutputDamage());
+            } else {
+                session.AttackedEntities.put(event.getTargetEntity().getType().getName(), event.getFinalOutputDamage());
+            }
+        }
+    }
+
+    @Listener
+    public void onDamageEntityEvent(DamageEntityEvent event, @First Player player) {
+        // do something
+        //logger.info(event.getTargetEntity().getType().getName() + " - " + event.toString() + " - " + event.getBaseDamage() + " - " + event.getFinalDamage() + " - " + event.willCauseDeath() + " - " + event.getTargetEntity().getUniqueId());
+        //logger.info(player.getName() + " is attacked? " + (player.getUniqueId().equals(event.getTargetEntity().getUniqueId().toString()) ? "yes" : "no"));
+
+        if(playerSessions.containsKey(event.getTargetEntity().getUniqueId().toString())) {
+            Session session = playerSessions.get(event.getTargetEntity().getUniqueId().toString());
+            session.setDamagetaken(session.getDamagetaken() + event.getFinalDamage());
+        }
+    }
+
+    @Listener
+    public void onDestructEntityEvent(DestructEntityEvent event, @First Player player) {
+        //logger.info(event.getCause().toString());
+        if(player.getUniqueId() == event.getTargetEntity().getUniqueId() && playerSessions.containsKey(event.getTargetEntity().getUniqueId())) {
+            //logger.info("Player died: " + player.getName());
+
+            Session session = playerSessions.get(player.getUniqueId().toString());
+            session.setDeads(session.getDeads() + 1);
+        }
+    }
+
+
+    @Listener
     public void onPlayerLeave(ClientConnectionEvent.Disconnect event)
     {
         String playerID = event.getTargetEntity().getUniqueId().toString();
 
+        savePlayerStatistics(playerID);
+
+        playerSessions.remove(playerID);
+        executeSql("UPDATE player SET isonline=0, serverid=NULL WHERE id='" + event.getTargetEntity().getUniqueId().toString() + "'");
+
+        //logger.info("Player left: " + event.getTargetEntity().getName() + " [" + event.getTargetEntity().getUniqueId() + "]");
+    }
+
+    private void savePlayerStatistics(String playerID)
+    {
         // get the session
         Session session = playerSessions.get(playerID);
         long playTime = (System.currentTimeMillis() - session.getStartTime());
 
+        // jsonize the attack log
+        Gson gson = new Gson();
+        String attackLog = gson.toJson(session.AttackedEntities);
+
         // update the session play time in the database
-        executeSql("UPDATE statistic_player SET playtime=" + playTime + " WHERE id=" + session.getSessionID());
-
-        playerSessions.remove(event.getTargetEntity().getUniqueId().toString());
-        executeSql("UPDATE player SET isonline=0, serverid=NULL WHERE id='" + event.getTargetEntity().getUniqueId().toString() + "'");
-
-        logger.info("Player left: " + event.getTargetEntity().getName() + " [" + event.getTargetEntity().getUniqueId() + "]");
+        executeSql("UPDATE statistic_player SET playtime=" + playTime + ", deads=" + session.getDeads() + ", damagetaken=" + session.getDamagetaken() + ", damagedealt=" + session.getDamagedealt() + ", attacklog='" + attackLog + "' WHERE id=" + session.getSessionID());
     }
 
     private static int LastOnlinePlayers = -1;
@@ -187,6 +255,11 @@ public class Statistics {
 
         // create schedule task
         task = game.getScheduler().createTaskBuilder().interval(interval, TimeUnit.SECONDS).execute(t -> {
+            // store the session information
+            for(Player p:game.getServer().getOnlinePlayers()) {
+                savePlayerStatistics(p.getUniqueId().toString());
+            }
+
             /*List<String> processedPlayers = new ArrayList<>();
 
             for(Player p:game.getServer().getOnlinePlayers()) {
@@ -304,10 +377,10 @@ public class Statistics {
             conn = sql.getDataSource("jdbc:mysql://" + config.getNode("database", "username").getString() + ":" + config.getNode("database", "password").getString() + "@" + config.getNode("database", "server").getString() + "/" + config.getNode("database", "database").getString()).getConnection();
 
             // validate the table setup
-            ResultSet results = querySql("SHOW TABLES");
+            /*ResultSet results = querySql("SHOW TABLES");
             while(results != null && results.next()) {
                 logger.info("- table found: " + results.getString(1));
-            }
+            }*/
         } catch(SQLException ex) {
             ex.printStackTrace();
         }
