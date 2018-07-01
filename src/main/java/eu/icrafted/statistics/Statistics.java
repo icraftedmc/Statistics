@@ -4,6 +4,10 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import org.spongepowered.api.Game;
 import org.spongepowered.api.Sponge;
+import org.spongepowered.api.command.CommandException;
+import org.spongepowered.api.command.CommandResult;
+import org.spongepowered.api.command.args.GenericArguments;
+import org.spongepowered.api.command.spec.CommandSpec;
 import org.spongepowered.api.plugin.Plugin;
 import org.spongepowered.api.scheduler.Task;
 import org.spongepowered.api.config.ConfigDir;
@@ -23,6 +27,7 @@ import org.spongepowered.api.event.network.ClientConnectionEvent;
 
 import org.spongepowered.api.entity.living.monster.Monster;
 import org.spongepowered.api.entity.living.player.Player;
+import org.spongepowered.api.text.Text;
 import org.spongepowered.api.world.World;
 import org.spongepowered.api.service.sql.SqlService;
 
@@ -345,7 +350,7 @@ public class Statistics {
             config.getNode("general", "interval").setValue(config.getNode("general", "interval").getInt(15));
             config.getNode("general", "server").setValue(config.getNode("general", "server").getString(""));
 
-            config.getNode("statistics", "store-always").setValue(config.getNode("general", "store-always").getBoolean(false));
+            config.getNode("statistics", "store-always").setValue(config.getNode("statistics", "store-always").getBoolean(false));
 
             config.getNode("database", "server").setValue(config.getNode("database", "server").getString("localhost"));
             config.getNode("database", "username").setValue(config.getNode("database", "username").getString("root"));
@@ -383,6 +388,26 @@ public class Statistics {
 
         return -1;
     }
+
+    /*private void initCommands()
+    {
+        CommandSpec statsCommand = CommandSpec.builder()
+                .description(Text.of("Use to reload messages from file."))
+                .permission("icrafted.stats.show")
+                .arguments(GenericArguments.string(Text.of("reload")))
+                .executor((src, args) -> {{
+                    if (args.<String>getOne("reload").get().equals("reload")){
+
+                        src.sendMessage(toText("&a[PixelAutoMessages] Messages reloaded!"));
+                        return CommandResult.success();
+                    }
+                    throw new CommandException(toText("[PixelAutoMessages] Use /pam reload to reload the messages"));
+                }
+                })
+                .build();
+
+        Sponge.getCommandManager().register(this, statsCommand, "stats");
+    }*/
 
     private void initSqlConnection()
     {
