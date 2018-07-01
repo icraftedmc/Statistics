@@ -304,7 +304,7 @@ public class Statistics {
             }*/
 
             // check if something changed
-            if(LastOnlinePlayers != game.getServer().getOnlinePlayers().size() || LastTps != game.getServer().getTicksPerSecond()) {
+            if(config.getNode("statistics", "store-always").getBoolean() || (LastOnlinePlayers != game.getServer().getOnlinePlayers().size() || LastTps != game.getServer().getTicksPerSecond())) {
                 LastTps = game.getServer().getTicksPerSecond();
                 LastOnlinePlayers = game.getServer().getOnlinePlayers().size();
 
@@ -344,6 +344,8 @@ public class Statistics {
             // build configuration
             config.getNode("general", "interval").setValue(config.getNode("general", "interval").getInt(15));
             config.getNode("general", "server").setValue(config.getNode("general", "server").getString(""));
+
+            config.getNode("statistics", "store-always").setValue(config.getNode("general", "store-always").getBoolean(false));
 
             config.getNode("database", "server").setValue(config.getNode("database", "server").getString("localhost"));
             config.getNode("database", "username").setValue(config.getNode("database", "username").getString("root"));
