@@ -68,6 +68,33 @@ CREATE TABLE IF NOT EXISTS `statistic_server` (
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporteren was gedeselecteerd
+-- Structuur van  tabel icrafted_statistics.world wordt geschreven
+DROP TABLE IF EXISTS `world`;
+CREATE TABLE IF NOT EXISTS `world` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `serverid` int(10) unsigned DEFAULT NULL,
+  `name` varchar(128) NOT NULL,
+  `dimension` varchar(128) NOT NULL,
+  `timestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `serverid` (`serverid`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
+
+-- Data exporteren was gedeselecteerd
+-- Structuur van  tabel icrafted_statistics.statistic_world wordt geschreven
+DROP TABLE IF EXISTS `statistic_world`;
+CREATE TABLE IF NOT EXISTS `statistic_world` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `worldid` int(10) unsigned DEFAULT NULL,
+  `loadedchunks` int(11) NOT NULL,
+  `loadedentities` int(11) NOT NULL,
+  `loadedtileentities` int(11) NOT NULL,
+  `timestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `worldid` (`worldid`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
+
+-- Data exporteren was gedeselecteerd
 /*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;
 /*!40014 SET FOREIGN_KEY_CHECKS=IF(@OLD_FOREIGN_KEY_CHECKS IS NULL, 1, @OLD_FOREIGN_KEY_CHECKS) */;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

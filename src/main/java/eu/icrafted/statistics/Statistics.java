@@ -1,8 +1,10 @@
 package eu.icrafted.statistics;
 
+import com.google.common.collect.Iterators;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import org.spongepowered.api.Game;
+import org.spongepowered.api.Server;
 import org.spongepowered.api.Sponge;
 import org.spongepowered.api.command.CommandException;
 import org.spongepowered.api.command.CommandResult;
@@ -98,7 +100,7 @@ public class Statistics {
             initConfig();
 
             // open the SQL connection
-            initSqlConnection();
+            //initSqlConnection();
 
             // load scheduler
             initScheduler();
@@ -142,7 +144,7 @@ public class Statistics {
             initConfig();
 
             // open the SQL connection
-            initSqlConnection();
+            //initSqlConnection();
 
             // load scheduler
             initScheduler();
@@ -169,12 +171,20 @@ public class Statistics {
                 executeSql("INSERT INTO player(name, id, isonline, serverid) VALUES('" + event.getTargetEntity().getName() + "', '" + event.getTargetEntity().getUniqueId().toString() + "', 1, " + serverId + ")");
             }
 
+            if(results != null) {
+                results.close();
+            }
+
             // create player session
             Session session = new Session();
             executeSql("INSERT INTO statistic_player (playerid, serverid) VALUES('" + event.getTargetEntity().getUniqueId() + "', " + serverId + ")");
             ResultSet result = querySql("SELECT LAST_INSERT_ID()");
             if(result != null && result.first()) {
                 session.setSessionID(result.getLong(1));
+            }
+
+            if(result != null) {
+                result.close();
             }
 
             session.setName(event.getTargetEntity().getName());
@@ -260,21 +270,22 @@ public class Statistics {
 
     private void initScheduler()
     {
-        logger.info("Reloading tasks...");
-        if (task != null){
-            task.cancel();
-            logger.info("-> Task stoped");
-        }
-
-        // run every x seconds
-        int interval = config.getNode("general", "interval").getInt();
-
-        // create schedule task
-        task = game.getScheduler().createTaskBuilder().interval(interval, TimeUnit.SECONDS).execute(t -> {
-            // store the session information
-            for(Player p:game.getServer().getOnlinePlayers()) {
-                savePlayerStatistics(p.getUniqueId().toString());
+        try {
+            logger.info("Reloading tasks...");
+            if (task != null) {
+                task.cancel();
+                logger.info("-> Task stoped");
             }
+
+            // run every x seconds
+            int interval = config.getNode("general", "interval").getInt();
+
+            // create schedule task
+            task = game.getScheduler().createTaskBuilder().interval(interval, TimeUnit.SECONDS).execute(t -> {
+                // store the session information
+                for (Player p : game.getServer().getOnlinePlayers()) {
+                    savePlayerStatistics(p.getUniqueId().toString());
+                }
 
             /*List<String> processedPlayers = new ArrayList<>();
 
@@ -308,27 +319,45 @@ public class Statistics {
                 executeSql("UPDATE player SET isonline=0 WHERE id NOT IN('" + String.join("','", processedPlayers) + "')");
             }*/
 
-            // check if something changed
-            if(config.getNode("statistics", "store-always").getBoolean() || (LastOnlinePlayers != game.getServer().getOnlinePlayers().size() || LastTps != game.getServer().getTicksPerSecond())) {
-                LastTps = game.getServer().getTicksPerSecond();
-                LastOnlinePlayers = game.getServer().getOnlinePlayers().size();
+                // check if something changed
+                if (config.getNode("statistics", "store-always").getBoolean() || (LastOnlinePlayers != game.getServer().getOnlinePlayers().size() || LastTps != game.getServer().getTicksPerSecond())) {
+                    LastTps = game.getServer().getTicksPerSecond();
+                    LastOnlinePlayers = game.getServer().getOnlinePlayers().size();
 
-                // write statistics
-                executeSql("INSERT INTO statistic_server(serverid, tps, onlineplayers, timestamp) VALUES('" + serverId + "', " + LastTps + ", " + LastOnlinePlayers + ", NOW())");
-            }
+                    //((Server)game.getServer()).
 
-            //logger.info("Online players: " + game.getServer().getOnlinePlayers().size());
-            //logger.info("Ticks per seconds: " + game.getServer().getTicksPerSecond());
+                    // write statistics
+                    executeSql("INSERT INTO statistic_server(serverid, tps, onlineplayers, timestamp) VALUES('" + serverId + "', " + LastTps + ", " + LastOnlinePlayers + ", NOW())");
+                }
 
-            /*for(World w:game.getServer().getWorlds()) {
-                logger.info("> World: " + w.getName());
-                // is array
-                //logger.info(" - Loaded chunks: " + w.getLoadedChunks());
-                logger.info(" - Dimension: " + w.getDimension().getType().getName());
-                logger.info(" - Weather: " + w.getWeather().getName());
+                //logger.info("Online players: " + game.getServer().getOnlinePlayers().size());
+                //logger.info("Ticks per seconds: " + game.getServer().getTicksPerSecond());
 
-            }*/
-        }).submit(this);
+                for (World w : game.getServer().getWorlds()) {
+                    int worldId = -1;
+                    try {
+                        worldId = getWorldID(serverId, w.getName(), w.getDimension().getType().getName());
+                        if(worldId != -1) {
+                            // write statistics
+                            executeSql("INSERT INTO statistic_world(worldid, loadedchunks, loadedentities, loadedtileentities, timestamp) VALUES('" + worldId + "', " + Iterators.size(w.getLoadedChunks().iterator()) + ", " + w.getEntities().size() + ", " +  w.getTileEntities().size() + ", NOW())");
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+
+                    /*logger.info("> World: " + w.getName());
+                    // is array
+                    //logger.info(" - Loaded chunks: " + w.getLoadedChunks());
+                    logger.info(" - Dimension: " + w.getDimension().getType().getName());
+                    logger.info(" - Weather: " + w.getWeather().getName());
+                    // new code 18-09-2018
+                    logger.info(" - Loaded chunks: " + Iterators.size(w.getLoadedChunks().iterator()));
+                    logger.info(" - Loaded entities: " + w.getEntities().size());*/
+                }
+            }).submit(this);
+        } catch(Exception ex) {
+            ex.printStackTrace();
+        }
     }
 
     private void initConfig()
@@ -374,12 +403,58 @@ public class Statistics {
             // check if the server exists
             ResultSet result = querySql("SELECT id FROM server WHERE identifier='" + identifier + "'");
             if (result != null && result.first()) {
-                return result.getInt(1);
+                int value = result.getInt(1);
+                result.close();
+
+                return value;
             } else {
                 executeSql("INSERT INTO server(identifier) VALUES('" + identifier + "')");
                 result = querySql("SELECT LAST_INSERT_ID()");
                 if(result != null && result.first()) {
-                    return result.getInt(1);
+                    int value = result.getInt(1);
+                    result.close();
+
+                    return value;
+                } else if(result != null) {
+                    result.close();
+                }
+            }
+        } catch(SQLException ex) {
+            ex.printStackTrace();
+        }
+
+        return -1;
+    }
+
+    private static HashMap<String, Integer> _cacheWorldId = new HashMap<String, Integer>();
+    private int getWorldID(int serverId, String name, String dimension) throws Exception
+    {
+        if(name.length() < 1) {
+            throw new Exception("No world name is given.");
+        }
+
+        if(_cacheWorldId.containsKey(name)) {
+            return _cacheWorldId.getOrDefault(name, -1);
+        }
+
+        try {
+            // check if the world exists
+            ResultSet result = querySql("SELECT id FROM world WHERE serverid=" + serverId + " AND name='" + name + "'");
+            if (result != null && result.first()) {
+                int id = result.getInt(1);
+                _cacheWorldId.put(name, id);
+                result.close();
+
+                return id;
+            } else {
+                executeSql("INSERT INTO world(serverid,name,dimension) VALUES(" + serverId + ",'" + name + "','" + dimension + "')");
+                result = querySql("SELECT LAST_INSERT_ID()");
+                if(result != null && result.first()) {
+                    int id = result.getInt(1);
+                    _cacheWorldId.put(name, id);
+                    result.close();
+
+                    return id;
                 }
             }
         } catch(SQLException ex) {
@@ -409,48 +484,73 @@ public class Statistics {
         Sponge.getCommandManager().register(this, statsCommand, "stats");
     }*/
 
-    private void initSqlConnection()
+    private Connection getConnection()
     {
         if(sql == null) {
             sql = Sponge.getServiceManager().provide(SqlService.class).get();
         }
 
+        Connection conn = null;
+
         try {
             conn = sql.getDataSource("jdbc:mysql://" + config.getNode("database", "username").getString() + ":" + config.getNode("database", "password").getString() + "@" + config.getNode("database", "server").getString() + "/" + config.getNode("database", "database").getString()).getConnection();
-
-            // validate the table setup
-            /*ResultSet results = querySql("SHOW TABLES");
-            while(results != null && results.next()) {
-                logger.info("- table found: " + results.getString(1));
-            }*/
         } catch(SQLException ex) {
             ex.printStackTrace();
         }
+
+        return conn;
     }
 
     private ResultSet querySql(String query)
     {
-        try {
-            PreparedStatement stmt = conn.prepareStatement(query);
-            ResultSet results = stmt.executeQuery();
-            stmt = null;
+        PreparedStatement stmt = null;
+        ResultSet results = null;
+        Connection conn = getConnection();
 
-            return results;
+        try {
+            stmt = conn.prepareStatement(query);
+            results = stmt.executeQuery();
         } catch(SQLException ex) {
             ex.printStackTrace();
+        } finally {
+            try {
+                if(stmt != null) {
+                    stmt.close();
+                }
+
+                conn.close();
+            } catch(SQLException ex) {
+                ex.printStackTrace();
+            }
         }
 
-        return null;
+        return results;
     }
 
-    private void executeSql(String query)
+    private boolean executeSql(String query)
     {
+        PreparedStatement stmt = null;
+        Connection conn = getConnection();
+        boolean result = false;
+
         try {
-            PreparedStatement stmt = conn.prepareStatement(query);
-            boolean result = stmt.execute();
-            stmt = null;
+            stmt = conn.prepareStatement(query);
+            stmt.closeOnCompletion();
+            result = stmt.execute();
         } catch(SQLException ex) {
             ex.printStackTrace();
+        } finally {
+            try {
+                if(stmt != null) {
+                    stmt.close();
+                }
+
+                conn.close();
+            } catch (SQLException ex) {
+                ex.printStackTrace();
+            }
         }
+
+        return result;
     }
 }
